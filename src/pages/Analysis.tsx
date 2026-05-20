@@ -34,9 +34,15 @@ export function Analysis() {
               <h1 className="font-heading text-2xl md:text-3xl font-bold text-[#1B1F1D]">
                 Analysis Complete
               </h1>
-              <Badge className="bg-[#DCE8DD] text-[#2F6B5F] border-none font-mono uppercase tracking-wider text-[10px]">
-                AI Verified
-              </Badge>
+              {data.isFallback ? (
+                <Badge className="bg-[#FFF3CD] text-[#856404] border-none font-mono uppercase tracking-wider text-[10px]">
+                  Sandbox Heuristics
+                </Badge>
+              ) : (
+                <Badge className="bg-[#DCE8DD] text-[#2F6B5F] border-none font-mono uppercase tracking-wider text-[10px]">
+                  AI Verified
+                </Badge>
+              )}
             </div>
             <p className="text-[#66706A] text-sm">
               Review recommendations before disposing of this item.

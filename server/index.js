@@ -181,15 +181,13 @@ const localDecisionsStore = [];
 // GEMINI MODEL FALLBACK CHAIN
 // Tries models in order; skips on 429 (rate-limit) or 404 (not found)
 // ==========================================
+// Try fastest/cheapest free-tier models first, fall back to pro on rate limit
 const GEMINI_MODEL_CHAIN = [
-  process.env.GEMINI_MODEL || 'gemini-1.5-flash',
-  'gemini-1.5-flash-002',
   'gemini-2.0-flash-lite',
   'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
   'gemini-1.5-pro',
-  'gemini-1.5-pro-002',
-  'gemini-2.0-flash-exp',
-  'gemini-exp-1206'
 ];
 
 async function callGemini(promptParts) {
@@ -202,8 +200,8 @@ async function callGemini(promptParts) {
       const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 1024,
+          temperature: 0.3,
+          maxOutputTokens: 2048,
           responseMimeType: 'application/json'
         }
       });
@@ -213,19 +211,32 @@ async function callGemini(promptParts) {
       return JSON.parse(text);
     } catch (err) {
       const status = err.status || err.statusCode || 0;
-      const isRateLimit = status === 429 || (err.message && err.message.includes('429'));
-      const errMsgLower = err.message ? err.message.toLowerCase() : '';
-      const isNotFound  = status === 404 || (errMsgLower.includes('model') && errMsgLower.includes('not found'));
+      const errMsg = err.message || '';
+
+      // Auth/key errors — stop immediately, no point trying other models
+      const isAuthError = status === 400 || status === 401 || status === 403 ||
+        errMsg.includes('API_KEY_INVALID') ||
+        errMsg.includes('API Key not found') ||
+        errMsg.includes('PERMISSION_DENIED');
+      if (isAuthError) {
+        console.error(`❌ Auth error with Gemini API key. Get a new key at https://aistudio.google.com/app/apikey`);
+        throw err; // throw immediately — no point trying other models
+      }
+
+      // Rate limit or model not found — try next model
+      const isRateLimit = status === 429 || errMsg.includes('429');
+      const isNotFound  = status === 404 || (errMsg.toLowerCase().includes('not found'));
       if (isRateLimit || isNotFound) {
         console.warn(`⚠️  Model ${modelName} unavailable (${status}), trying next…`);
         lastError = err;
-        continue; // try the next model
+        continue;
       }
-      // Any other error (auth, bad payload, etc.) — throw immediately
+
+      // Any other unexpected error — throw
       throw err;
     }
   }
-  throw lastError || new Error('All Gemini models failed or are rate-limited.');
+  throw lastError || new Error('All Gemini models exhausted. Please try again later.');
 }
 
 // ==========================================
@@ -500,6 +511,104 @@ Analyze the image and return a JSON object with the following fields:
   }
 });
 
+// Heuristic object detector based on file name or image URL metadata
+function detectObjectFromFilename(filename) {
+  const name = (filename || '').toLowerCase();
+  
+  if (name.includes('phone') || name.includes('mobile') || name.includes('iphone') || name.includes('android')) {
+    return {
+      objectType: "Old Mobile Phone",
+      isEwaste: true,
+      wasteCategory: "electronic",
+      confidence: 0.95
+    };
+  }
+  if (name.includes('laptop') || name.includes('macbook') || name.includes('computer')) {
+    return {
+      objectType: "Old Laptop",
+      isEwaste: true,
+      wasteCategory: "electronic",
+      confidence: 0.93
+    };
+  }
+  if (name.includes('battery') || name.includes('batteries') || name.includes('powerbank')) {
+    return {
+      objectType: "Rechargeable Battery",
+      isEwaste: true,
+      wasteCategory: "electronic",
+      confidence: 0.92
+    };
+  }
+  if (name.includes('can') || name.includes('tin') || name.includes('coke') || name.includes('soda') || name.includes('pepsi') || name.includes('sprite') || name.includes('metal') || name.includes('aluminum')) {
+    return {
+      objectType: "Aluminum Soda Can",
+      isEwaste: false,
+      wasteCategory: "metal",
+      confidence: 0.96
+    };
+  }
+  if (name.includes('box') || name.includes('cardboard') || name.includes('carton')) {
+    return {
+      objectType: "Cardboard Box",
+      isEwaste: false,
+      wasteCategory: "paper",
+      confidence: 0.94
+    };
+  }
+  if (name.includes('paper') || name.includes('newspaper') || name.includes('news')) {
+    return {
+      objectType: "Newspaper",
+      isEwaste: false,
+      wasteCategory: "paper",
+      confidence: 0.95
+    };
+  }
+  if (name.includes('glass') || name.includes('jar')) {
+    return {
+      objectType: "Glass Jar",
+      isEwaste: false,
+      wasteCategory: "glass",
+      confidence: 0.94
+    };
+  }
+  if (name.includes('bulb') || name.includes('light') || name.includes('lamp')) {
+    return {
+      objectType: "Fluorescent Light Bulb",
+      isEwaste: true,
+      wasteCategory: "hazardous",
+      confidence: 0.91
+    };
+  }
+  if (name.includes('bottle') || name.includes('plastic') || name.includes('pet')) {
+    return {
+      objectType: "Plastic Water Bottle",
+      isEwaste: false,
+      wasteCategory: "plastic",
+      confidence: 0.95
+    };
+  }
+  
+  // Default fallback if no keywords found
+  return {
+    objectType: "Plastic Water Bottle",
+    isEwaste: false,
+    wasteCategory: "plastic",
+    confidence: 0.95
+  };
+}
+
+// Map recognized object names to standard categories
+function getCategoryFromObjectType(objectType) {
+  const type = (objectType || '').toLowerCase();
+  if (type.includes('phone') || type.includes('laptop') || type.includes('computer') || type.includes('battery')) return 'electronic';
+  if (type.includes('can') || type.includes('tin') || type.includes('metal')) return 'metal';
+  if (type.includes('bottle') || type.includes('plastic')) return 'plastic';
+  if (type.includes('box') || type.includes('cardboard') || type.includes('paper') || type.includes('newspaper')) return 'paper';
+  if (type.includes('glass') || type.includes('jar')) return 'glass';
+  if (type.includes('bulb') || type.includes('light')) return 'hazardous';
+  return 'other';
+}
+
 // 3.1. Initiate Scan Image analysis and dynamic survey generation using Gemini AI
 app.post('/api/scan/initiate', async (req, res) => {
   try {
@@ -572,11 +681,15 @@ Return a JSON object with the following fields:
     }
 
     if (fallbackToMock) {
-      // High-fidelity mock question fallback
-      const isEwasteMock = (scanRecord && scanRecord.image_url && (scanRecord.image_url.includes('electronics') || scanRecord.image_url.includes('battery'))) || false;
+      // Heuristically classify the item using the image storage path or url
+      const pathToCheck = (scanRecord && (scanRecord.image_storage_path || scanRecord.image_url)) || '';
+      const detected = detectObjectFromFilename(pathToCheck);
+      
+      const isEwasteMock = detected.isEwaste;
+      
       result = {
-        objectType: isEwasteMock ? "Old Mobile Phone" : "Plastic Water Bottle",
-        confidence: 0.95,
+        objectType: detected.objectType,
+        confidence: detected.confidence,
         isEwaste: isEwasteMock,
         questions: isEwasteMock ? [
           {
@@ -607,6 +720,36 @@ Return a JSON object with the following fields:
               { value: 'complete', label: 'All components intact' },
               { value: 'minor_missing', label: 'Minor parts missing (buttons, trays)' },
               { value: 'stripped', label: 'Internal components stripped' }
+            ]
+          }
+        ] : (detected.wasteCategory === 'metal' ? [
+          {
+            id: 'clean',
+            title: 'Is the can clean and rinsed?',
+            description: 'Residual liquids can cause foul odors and attract pests during storage.',
+            options: [
+              { value: 'yes', label: 'Yes, clean and dry' },
+              { value: 'needs_cleaning', label: 'Needs rinsing' },
+              { value: 'no', label: 'No, contains sticky residue' }
+            ]
+          },
+          {
+            id: 'crushed',
+            title: 'Is the can crushed or flattened?',
+            description: 'Crushing saves storage and shipping space during collection.',
+            options: [
+              { value: 'yes', label: 'Yes, fully crushed' },
+              { value: 'no', label: 'No, still in full shape' }
+            ]
+          },
+          {
+            id: 'material',
+            title: 'Is it aluminum or steel/tin?',
+            description: 'Aluminum is lightweight and non-magnetic; steel is magnetic.',
+            options: [
+              { value: 'aluminum', label: 'Aluminum (non-magnetic)' },
+              { value: 'steel', label: 'Steel/Tin (magnetic)' },
+              { value: 'unknown', label: 'Unsure' }
             ]
           }
         ] : [
@@ -640,9 +783,11 @@ Return a JSON object with the following fields:
               { value: 'major', label: 'Major components missing' }
             ]
           }
-        ]
+        ])
       };
     }
+
+    const calculatedCategory = getCategoryFromObjectType(result.objectType);
 
     // Save dynamic questions inside scan record (gemini_response JSON field)
     if (supabaseAdmin) {
@@ -652,6 +797,7 @@ Return a JSON object with the following fields:
           object_type: result.objectType,
           confidence: result.confidence,
           is_ewaste: result.isEwaste,
+          waste_category: calculatedCategory,
           gemini_response: { ...scanRecord.gemini_response, questions: result.questions },
           updated_at: new Date().toISOString()
         })
@@ -662,6 +808,7 @@ Return a JSON object with the following fields:
         object_type: result.objectType,
         confidence: result.confidence,
         is_ewaste: result.isEwaste,
+        waste_category: calculatedCategory,
         gemini_response: { ...scanRecord.gemini_response, questions: result.questions }
       });
     }
@@ -786,6 +933,7 @@ Based on the image and these survey answers, perform a final detailed waste anal
 
     if (fallbackToMock) {
       const isEwaste = scanRecord.is_ewaste;
+      const category = (scanRecord.waste_category || '').toLowerCase();
       
       if (isEwaste) {
         result = {
@@ -829,6 +977,31 @@ Based on the image and these survey answers, perform a final detailed waste anal
             ? "⚠️ CRITICAL HAZARD: Store in a sand container. Deliver immediately to Makati E-Waste or specialized barangay drop points. Do not press or expose to heat."
             : "Remove SIM cards. Wipe personal data. Deliver to certified e-waste facilities to recover precious metals like gold and silver safely.",
           impact: "2.80"
+        };
+      } else if (category === 'metal') {
+        result = {
+          item: `${objectType} · Recyclable Metal`,
+          confidence: 96,
+          condition: answers.clean === 'yes' ? 'Recyclable' : 'Needs Rinsing',
+          hazard: null,
+          reuse: [
+            {
+              title: "Desk Pen Holder",
+              desc: "Smooth the top edge and paint/wrap the can to create a durable desk organizer.",
+              icon: "PenTool"
+            },
+            {
+              title: "Soda Can Lantern",
+              desc: "Make decorative slits on the side, push them outwards, and insert a tea light candle.",
+              icon: "Wrench"
+            }
+          ],
+          repair: [],
+          donate: [],
+          recycle: answers.clean === 'no' 
+            ? "Rinse thoroughly to remove sweet beverage residue. Crush it flat to save space, and place it in the metals/cans recycling bin."
+            : "Crush it flat to optimize collection space. Dispose of it in the metals recycling bin for infinite recycling loops.",
+          impact: "0.18"
         };
       } else {
         result = {
@@ -887,6 +1060,7 @@ Based on the image and these survey answers, perform a final detailed waste anal
     res.json({
       success: true,
       scanId,
+      isFallback: fallbackToMock,
       ...result
     });
 
