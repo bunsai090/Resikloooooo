@@ -53,7 +53,6 @@ const steps = [
 
 export function PhonePractice() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const phoneColRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const screenRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -74,19 +73,13 @@ export function PhonePractice() {
       if (prefersReduced) return;
       ScrollTrigger.matchMedia({
         '(min-width: 768px)': () => {
-          const proxy = {
-            p: 0
-          };
           let currentIdx = 0;
           const trigger = ScrollTrigger.create({
             trigger: sectionRef.current,
             start: 'top top',
-            end: '+=300%',
-            pin: phoneColRef.current,
-            pinSpacing: false,
+            end: 'bottom bottom',
             scrub: 0.6,
             onUpdate: (self) => {
-              proxy.p = self.progress;
               // Update rail
               if (railRef.current) {
                 gsap.set(railRef.current, {
@@ -161,7 +154,7 @@ export function PhonePractice() {
   return (
     <section
       ref={sectionRef}
-      className="relative bg-white py-20 md:py-24 overflow-hidden">
+      className="relative bg-white py-20 md:py-24">
       
       {/* Section intro */}
       <div className="container mb-12 md:mb-20">
@@ -239,47 +232,53 @@ export function PhonePractice() {
             )}
           </div>
 
-          {/* Right: sticky phone (desktop) */}
-          <div
-            ref={phoneColRef}
-            className="hidden md:flex justify-center items-center h-screen">
-            
-            <div className="relative">
-              <PhoneFrame>
-                <div
-                  ref={(el) => screenRefs.current[0] = el}
-                  className="absolute inset-0">
-                  
-                  <ScanScreen />
-                </div>
-                <div
-                  ref={(el) => screenRefs.current[1] = el}
-                  className="absolute inset-0">
-                  
-                  <AnalyzeScreen />
-                </div>
-                <div
-                  ref={(el) => screenRefs.current[2] = el}
-                  className="absolute inset-0">
-                  
-                  <MapScreen />
-                </div>
-                <div
-                  ref={(el) => screenRefs.current[3] = el}
-                  className="absolute inset-0">
-                  
-                  <LearnScreen />
-                </div>
-              </PhoneFrame>
+          {/* Right: sticky phone (desktop) — uses CSS sticky so the phone
+              stays fully visible in viewport while the left column scrolls */}
+          <div className="hidden md:block">
+            <div
+              className="sticky flex justify-center items-center"
+              style={{
+                top: 'calc(50vh - 330px)',
+                height: '660px',
+              }}>
+              
+              <div className="relative">
+                <PhoneFrame>
+                  <div
+                    ref={(el) => screenRefs.current[0] = el}
+                    className="absolute inset-0">
+                    
+                    <ScanScreen />
+                  </div>
+                  <div
+                    ref={(el) => screenRefs.current[1] = el}
+                    className="absolute inset-0">
+                    
+                    <AnalyzeScreen />
+                  </div>
+                  <div
+                    ref={(el) => screenRefs.current[2] = el}
+                    className="absolute inset-0">
+                    
+                    <MapScreen />
+                  </div>
+                  <div
+                    ref={(el) => screenRefs.current[3] = el}
+                    className="absolute inset-0">
+                    
+                    <LearnScreen />
+                  </div>
+                </PhoneFrame>
 
-              {/* Step indicator dots */}
-              <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex gap-1.5">
-                {steps.map((_, i) =>
-                <span
-                  key={i}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${i === activeIdx ? 'w-6 bg-[#2F6B5F]' : 'w-1.5 bg-[#1B1F1D]/15'}`} />
+                {/* Step indicator dots */}
+                <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex gap-1.5">
+                  {steps.map((_, i) =>
+                  <span
+                    key={i}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${i === activeIdx ? 'w-6 bg-[#2F6B5F]' : 'w-1.5 bg-[#1B1F1D]/15'}`} />
 
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </div>
