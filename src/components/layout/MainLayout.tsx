@@ -1,17 +1,23 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { TopNav } from './TopNav';
 import { BottomNav } from './BottomNav';
 import { Footer } from './Footer';
+
+const NO_FOOTER_ROUTES = ['/map'];
+
 export function MainLayout() {
+  const { pathname } = useLocation();
+  const hideFooter = NO_FOOTER_ROUTES.includes(pathname);
+
   return (
     <div className="flex min-h-screen flex-col bg-[#F6F8F5] font-sans selection:bg-primary/20">
       <TopNav />
-      <main className="flex-1 pb-20 md:pb-0">
+      <main className={`flex-1 ${hideFooter ? '' : 'pb-20 md:pb-0'}`}>
         <Outlet />
       </main>
-      <Footer />
+      {!hideFooter && <Footer />}
       <BottomNav />
-    </div>);
-
+    </div>
+  );
 }
