@@ -1,165 +1,434 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { MapPin, Navigation, Clock, Search, Filter } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+// @ts-ignore
+import Map, { Marker, Popup, NavigationControl, GeolocateControl } from 'react-map-gl/mapbox';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  MapPin, Navigation, Clock, Search,
+  Loader2, AlertCircle, RefreshCw, ExternalLink, Zap,
+} from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Badge } from '../components/Badge';
 import { ScrollArea } from '../components/ScrollArea';
-import { mockFacilities } from '../lib/mockData';
-const categories = [
-{
-  id: 'all',
-  label: 'All'
-},
-{
-  id: 'recycling',
-  label: 'Recycling'
-},
-{
-  id: 'e-waste',
-  label: 'E-Waste'
-},
-{
-  id: 'donation',
-  label: 'Donation'
-}];
+import 'mapbox-gl/dist/mapbox-gl.css';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const env = (import.meta as any).env ?? {};
+const MAPBOX_TOKEN: string = env.VITE_MAPBOX_TOKEN ?? '';
+const API_BASE: string = env.VITE_API_BASE_URL ?? 'http://localhost:5000';
+
+// ── Zamboanga City — locked center & bounds ──────────────────────────────────
+const ZAMBOANGA_CENTER = { lat: 6.9214, lng: 122.0790 };
+const ZAMBOANGA_BOUNDS: [[number, number], [number, number]] = [
+  [121.8500, 6.7500], // SW
+  [122.2500, 7.1000], // NE
+];
+
+type Facility = {
+  id: string;
+  name: string;
+  type: string;
+  latitude: number;
+  longitude: number;
+  distance: number;
+  address: string;
+  verified: boolean;
+  accepted_waste: string[];
+  hours?: string;
+  notes?: string;
+};
+
+// Pill color for e-waste type
+const EWASTE_COLOR = '#C65B4B';
+
+function formatDistance(km: number) {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
 
 export function MapPage() {
-  const [activeCategory, setActiveCategory] = useState('all');
-  const filteredFacilities =
-  activeCategory === 'all' ?
-  mockFacilities :
-  mockFacilities.filter((f) => f.type === activeCategory);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewState, setViewState] = useState({
+    longitude: ZAMBOANGA_CENTER.lng,
+    latitude: ZAMBOANGA_CENTER.lat,
+    zoom: 13,
+  });
+
+  // Always fetch Zamboanga e-waste facilities — no user location needed
+  const fetchFacilities = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        lat: ZAMBOANGA_CENTER.lat.toString(),
+        lng: ZAMBOANGA_CENTER.lng.toString(),
+        radius: '30',
+        type: 'ewaste',
+        city: 'zamboanga',
+      });
+      const res = await fetch(`${API_BASE}/api/facilities?${params}`);
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const data = await res.json();
+      setFacilities(data.facilities || []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load facilities';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFacilities();
+  }, [fetchFacilities]);
+
+  const filteredFacilities = facilities.filter((f) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      f.name.toLowerCase().includes(q) ||
+      f.address.toLowerCase().includes(q) ||
+      f.accepted_waste?.some((w) => w.toLowerCase().includes(q))
+    );
+  });
+
+  function openDirections(facility: Facility) {
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${facility.latitude},${facility.longitude}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  function flyTo(facility: Facility) {
+    setSelectedFacility(facility);
+    setViewState((v) => ({
+      ...v,
+      longitude: facility.longitude,
+      latitude: facility.latitude,
+      zoom: 15,
+    }));
+  }
+
   return (
-    <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-[#F6F8F5] overflow-hidden relative">
-      {/* Map Area (Mocked with CSS/Image for reliability) */}
-      <div className="flex-1 relative bg-[#E8EAE6] order-2 md:order-1 h-[50vh] md:h-full">
-        {/* Minimalist map background pattern */}
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232F6B5F' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-          }} />
-        
+    <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-[#F6F8F5] overflow-hidden relative">
 
-        {/* Map Pins */}
-        <div className="absolute top-[40%] left-[30%]">
-          <div className="relative group cursor-pointer">
-            <div className="w-8 h-8 bg-[#2F6B5F] rounded-full flex items-center justify-center text-white shadow-lg shadow-[#2F6B5F]/30 z-10 relative group-hover:scale-110 transition-transform">
-              <MapPin className="w-4 h-4" />
-            </div>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white px-3 py-1.5 rounded-lg shadow-lg text-xs font-bold text-[#1B1F1D] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
-              Barangay San Lorenzo
+      {/* ── MAP ── */}
+      <div className="flex-1 relative order-2 md:order-1 h-[50vh] md:h-full">
+        {!MAPBOX_TOKEN ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#E8EAE6]">
+            <div className="text-center p-6">
+              <AlertCircle className="w-10 h-10 text-[#C65B4B] mx-auto mb-3" />
+              <p className="font-bold text-[#1B1F1D]">Mapbox token not configured</p>
+              <p className="text-sm text-[#66706A] mt-1">Add VITE_MAPBOX_TOKEN to your .env file</p>
             </div>
           </div>
+        ) : (
+          <Map
+            {...viewState}
+            onMove={(evt: { viewState: typeof viewState }) => setViewState(evt.viewState)}
+            mapStyle="mapbox://styles/mapbox/light-v11"
+            mapboxAccessToken={MAPBOX_TOKEN}
+            style={{ width: '100%', height: '100%' }}
+            maxBounds={ZAMBOANGA_BOUNDS}
+            onClick={() => setSelectedFacility(null)}
+          >
+            <NavigationControl position="top-right" />
+            <GeolocateControl
+              position="top-right"
+              trackUserLocation
+              showUserHeading
+              showAccuracyCircle
+            />
+
+            {/* E-waste markers */}
+            {filteredFacilities.map((facility) => (
+              <Marker
+                key={facility.id}
+                longitude={facility.longitude}
+                latitude={facility.latitude}
+                anchor="bottom"
+                onClick={(_e: { originalEvent: { stopPropagation: () => void } }) => flyTo(facility)}
+              >
+                <div
+                  className="cursor-pointer transition-transform hover:scale-110"
+                  style={{
+                    filter: selectedFacility?.id === facility.id
+                      ? 'drop-shadow(0 0 8px rgba(198,91,75,0.6))'
+                      : undefined,
+                  }}
+                >
+                  {/* Pulse ring on selected */}
+                  {selectedFacility?.id === facility.id && (
+                    <span className="absolute inset-0 rounded-full animate-ping bg-[#C65B4B]/30" />
+                  )}
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg relative"
+                    style={{ backgroundColor: EWASTE_COLOR }}
+                  >
+                    <Zap className="w-4 h-4" />
+                  </div>
+                </div>
+              </Marker>
+            ))}
+
+            {/* Popup */}
+            {selectedFacility && (
+              <Popup
+                longitude={selectedFacility.longitude}
+                latitude={selectedFacility.latitude}
+                anchor="top"
+                onClose={() => setSelectedFacility(null)}
+                closeButton
+                closeOnClick={false}
+                maxWidth="280px"
+              >
+                <div className="p-1">
+                  <div className="flex items-start gap-2 mb-1">
+                    <p className="font-bold text-[#1B1F1D] text-sm leading-tight flex-1">
+                      {selectedFacility.name}
+                    </p>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full text-white shrink-0 bg-[#C65B4B]">
+                      E-Waste
+                    </span>
+                  </div>
+                  <p className="text-[#66706A] text-xs mb-1">{selectedFacility.address}</p>
+                  {selectedFacility.hours && (
+                    <p className="text-[10px] text-[#66706A] mb-2 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> {selectedFacility.hours}
+                    </p>
+                  )}
+                  {selectedFacility.notes && (
+                    <p className="text-[10px] text-[#2F6B5F] bg-[#2F6B5F]/8 rounded-md px-2 py-1 mb-2 leading-relaxed">
+                      {selectedFacility.notes}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {selectedFacility.accepted_waste?.slice(0, 4).map((w) => (
+                      <span key={w} className="text-[10px] bg-[#F6F8F5] text-[#66706A] px-1.5 py-0.5 rounded-md capitalize">
+                        {w}
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => openDirections(selectedFacility)}
+                    className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-white py-2 rounded-lg bg-[#C65B4B] hover:bg-[#b54e3f] transition-colors"
+                  >
+                    <Navigation className="w-3 h-3" />
+                    Get Directions
+                  </button>
+                </div>
+              </Popup>
+            )}
+          </Map>
+        )}
+
+        {/* City label overlay */}
+        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow text-xs font-bold text-[#1B1F1D] flex items-center gap-1.5 pointer-events-none">
+          <MapPin className="w-3 h-3 text-[#C65B4B]" />
+          Zamboanga City, Philippines
         </div>
 
-        <div className="absolute top-[60%] left-[60%]">
-          <div className="relative group cursor-pointer">
-            <div className="w-8 h-8 bg-[#C65B4B] rounded-full flex items-center justify-center text-white shadow-lg shadow-[#C65B4B]/30 z-10 relative group-hover:scale-110 transition-transform">
-              <MapPin className="w-4 h-4" />
-            </div>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white px-3 py-1.5 rounded-lg shadow-lg text-xs font-bold text-[#1B1F1D] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
-              GreenTech E-Waste
-            </div>
+        {loading && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white rounded-full px-4 py-2 shadow-lg flex items-center gap-2 text-sm font-medium text-[#1B1F1D] z-10">
+            <Loader2 className="w-4 h-4 animate-spin text-[#C65B4B]" />
+            Loading drop-off points…
           </div>
-        </div>
-
-        {/* User Location Pin */}
-        <div className="absolute top-[50%] left-[45%]">
-          <div className="w-4 h-4 bg-[#1B1F1D] rounded-full border-2 border-white shadow-md relative">
-            <div className="absolute inset-0 bg-[#1B1F1D] rounded-full animate-ping opacity-50" />
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Sidebar Panel */}
-      <div className="w-full md:w-[400px] lg:w-[450px] bg-white border-l border-border/40 flex flex-col order-1 md:order-2 h-[50vh] md:h-full z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.02)] rounded-t-3xl md:rounded-none -mt-6 md:mt-0 relative">
-        {/* Mobile Drag Handle */}
+      {/* ── SIDEBAR ── */}
+      <div className="w-full md:w-[400px] lg:w-[440px] bg-white border-l border-border/40 flex flex-col order-1 md:order-2 h-[50vh] md:h-full z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.02)] rounded-t-3xl md:rounded-none -mt-6 md:mt-0 relative">
+
+        {/* Mobile drag handle */}
         <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mt-3 mb-1 md:hidden" />
 
         <div className="p-4 md:p-6 border-b border-border/40">
-          <h1 className="font-heading text-2xl font-bold text-[#1B1F1D] mb-4">
-            Disposal Map
-          </h1>
-
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#66706A]" />
-            <Input
-              placeholder="Search facilities or waste types..."
-              className="pl-9 bg-[#F6F8F5] border-transparent focus-visible:ring-[#2F6B5F] rounded-xl h-11" />
-            
+          {/* Header */}
+          <div className="flex items-start justify-between mb-1">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <Zap className="w-4 h-4 text-[#C65B4B]" />
+                <h1 className="font-heading text-xl font-bold text-[#1B1F1D]">E-Waste Drop-offs</h1>
+              </div>
+              <p className="text-[11px] text-[#66706A] flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                Zamboanga City only
+              </p>
+            </div>
+            <button
+              onClick={fetchFacilities}
+              className="p-2 rounded-xl hover:bg-[#F6F8F5] transition-colors text-[#66706A] mt-0.5"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {categories.map((cat) =>
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${activeCategory === cat.id ? 'bg-[#1B1F1D] text-white' : 'bg-[#F6F8F5] text-[#66706A] hover:bg-gray-200'}`}>
-              
-                {cat.label}
-              </button>
-            )}
+          {/* Info banner */}
+          <div className="bg-[#C65B4B]/5 border border-[#C65B4B]/15 rounded-xl px-3 py-2 mb-4 mt-3">
+            <p className="text-[11px] text-[#C65B4B] leading-relaxed">
+              Drop off old phones, batteries, chargers & gadgets at any of these certified collection points. No registration required.
+            </p>
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#66706A]" />
+            <Input
+              placeholder="Search by name or accepted items…"
+              value={searchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-[#F6F8F5] border-transparent focus-visible:ring-[#C65B4B] rounded-xl h-10 text-sm"
+            />
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-4 md:p-6">
-          <div className="space-y-4 pb-20 md:pb-0">
-            {filteredFacilities.map((facility, i) =>
-            <motion.div
-              initial={{
-                opacity: 0,
-                y: 10
-              }}
-              animate={{
-                opacity: 1,
-                y: 0
-              }}
-              transition={{
-                delay: i * 0.1
-              }}
-              key={facility.id}
-              className="bg-white border border-border/50 rounded-2xl p-4 hover:border-[#2F6B5F]/30 hover:shadow-md transition-all cursor-pointer group">
-              
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-bold text-[#1B1F1D] group-hover:text-[#2F6B5F] transition-colors">
-                    {facility.name}
-                  </h3>
-                  <span className="text-xs font-mono text-[#66706A] bg-[#F6F8F5] px-2 py-1 rounded-md">
-                    {facility.distance}
-                  </span>
-                </div>
+        <ScrollArea className="flex-1 p-4 md:p-5">
+          <div className="space-y-3 pb-20 md:pb-4">
 
-                <div className="flex items-center gap-2 text-xs text-[#66706A] mb-3">
-                  <Clock className="w-3.5 h-3.5" />
-                  {facility.hours}
+            {/* Error */}
+            {error && (
+              <div className="bg-[#C65B4B]/5 border border-[#C65B4B]/20 rounded-2xl p-4 flex gap-3">
+                <AlertCircle className="w-5 h-5 text-[#C65B4B] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-[#C65B4B]">Could not load facilities</p>
+                  <p className="text-xs text-[#66706A] mt-0.5">{error}</p>
+                  <p className="text-xs text-[#66706A] mt-1">Make sure the server is running on port 5000.</p>
                 </div>
+              </div>
+            )}
 
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {facility.accepted.map((item) =>
-                <Badge
-                  key={item}
-                  variant="outline"
-                  className="text-[10px] bg-[#F6F8F5] border-transparent text-[#66706A]">
-                  
-                      {item}
-                    </Badge>
-                )}
-                </div>
+            {/* Skeletons */}
+            {loading && facilities.length === 0 && (
+              <>
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="bg-white border border-border/50 rounded-2xl p-4 animate-pulse">
+                    <div className="flex justify-between mb-3">
+                      <div className="h-4 bg-gray-100 rounded w-2/3" />
+                      <div className="h-4 bg-gray-100 rounded w-12" />
+                    </div>
+                    <div className="h-3 bg-gray-100 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-gray-100 rounded w-1/2 mb-3" />
+                    <div className="h-9 bg-gray-100 rounded-xl" />
+                  </div>
+                ))}
+              </>
+            )}
 
-                <Button
-                variant="outline"
-                className="w-full rounded-xl text-sm h-10 border-border/50 hover:bg-[#F6F8F5]">
-                
-                  <Navigation className="w-4 h-4 mr-2" />
-                  Get Directions
-                </Button>
-              </motion.div>
+            {/* Empty */}
+            {!loading && !error && filteredFacilities.length === 0 && (
+              <div className="text-center py-12">
+                <Zap className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="font-bold text-[#1B1F1D]">No drop-off points found</p>
+                <p className="text-sm text-[#66706A] mt-1">
+                  {searchQuery ? 'Try a different search term.' : 'Make sure the server is running.'}
+                </p>
+              </div>
+            )}
+
+            {/* Cards */}
+            <AnimatePresence>
+              {filteredFacilities.map((facility, i) => (
+                <motion.div
+                  key={facility.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ delay: i * 0.06 }}
+                  onClick={() => flyTo(facility)}
+                  className={`bg-white border rounded-2xl p-4 cursor-pointer transition-all group ${
+                    selectedFacility?.id === facility.id
+                      ? 'border-[#C65B4B] shadow-md ring-1 ring-[#C65B4B]/20'
+                      : 'border-border/50 hover:border-[#C65B4B]/30 hover:shadow-sm'
+                  }`}
+                >
+                  {/* Name + distance */}
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-[#1B1F1D] group-hover:text-[#C65B4B] transition-colors text-sm leading-snug pr-2">
+                      {facility.name}
+                    </h3>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-xs font-mono text-[#66706A] bg-[#F6F8F5] px-2 py-0.5 rounded-md">
+                        {formatDistance(facility.distance)}
+                      </span>
+                      {facility.verified && (
+                        <span className="text-[9px] font-mono text-[#2F6B5F] bg-[#2F6B5F]/10 px-1.5 py-0.5 rounded-full">
+                          ✓ Verified
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Address */}
+                  <p className="text-xs text-[#66706A] mb-2 flex items-start gap-1">
+                    <MapPin className="w-3 h-3 shrink-0 mt-0.5 text-[#C65B4B]" />
+                    {facility.address}
+                  </p>
+
+                  {/* Hours */}
+                  {facility.hours && (
+                    <div className="flex items-center gap-1.5 text-xs text-[#66706A] mb-2">
+                      <Clock className="w-3 h-3" />
+                      {facility.hours}
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {facility.notes && (
+                    <p className="text-[10px] text-[#2F6B5F] bg-[#2F6B5F]/5 rounded-lg px-2 py-1.5 mb-3 leading-relaxed">
+                      ℹ️ {facility.notes}
+                    </p>
+                  )}
+
+                  {/* Accepted waste tags */}
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full text-white bg-[#C65B4B]">
+                      E-Waste
+                    </span>
+                    {facility.accepted_waste?.slice(0, 3).map((item) => (
+                      <Badge
+                        key={item}
+                        variant="outline"
+                        className="text-[10px] bg-[#F6F8F5] border-transparent text-[#66706A] capitalize"
+                      >
+                        {item}
+                      </Badge>
+                    ))}
+                    {(facility.accepted_waste?.length || 0) > 3 && (
+                      <Badge variant="outline" className="text-[10px] bg-[#F6F8F5] border-transparent text-[#66706A]">
+                        +{facility.accepted_waste.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Directions button */}
+                  <Button
+                    variant="outline"
+                    className="w-full rounded-xl text-sm h-9 border-[#C65B4B]/20 text-[#C65B4B] hover:bg-[#C65B4B]/5 hover:border-[#C65B4B]/40"
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      openDirections(facility);
+                    }}
+                  >
+                    <Navigation className="w-3.5 h-3.5 mr-2" />
+                    Get Directions
+                    <ExternalLink className="w-3 h-3 ml-auto opacity-40" />
+                  </Button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {/* Count */}
+            {!loading && filteredFacilities.length > 0 && (
+              <p className="text-center text-xs text-[#66706A] py-2">
+                {filteredFacilities.length} e-waste drop-off point{filteredFacilities.length !== 1 ? 's' : ''} in Zamboanga City
+              </p>
             )}
           </div>
         </ScrollArea>
       </div>
-    </div>);
-
+    </div>
+  );
 }
