@@ -74,12 +74,13 @@ export function Validate() {
   const scanId = state.scanId;
   const imageUrl = state.imageUrl;
   const imageBase64 = state.imageBase64;  // real base64 for Gemini
+  const prefillAnswers = state.prefillAnswers || {};
   
   // Use dynamic questions if passed in router state, otherwise fall back to static/mock questions
   const questionsToUse = state.questions && state.questions.length > 0 ? state.questions : questions;
   
   const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(prefillAnswers);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
