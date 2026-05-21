@@ -17,8 +17,29 @@ const PORT = process.env.PORT || 5000;
 const rawOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const clientOrigin = rawOrigin.endsWith('/') ? rawOrigin.slice(0, -1) : rawOrigin;
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://192.168.1.11:5173'
+];
+
 app.use(cors({
-  origin: [clientOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://192.168.1.11:5173'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or local testing)
+    if (!origin) return callback(null, true);
+    
+    // Check if it matches configured client origin or local origins
+    if (origin === clientOrigin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Dynamically allow any Vercel deployment domain
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '25mb' }));
