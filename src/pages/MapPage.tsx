@@ -114,8 +114,8 @@ export function MapPage() {
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-[#F6F8F5] overflow-hidden relative">
 
-      {/* ── MAP ── */}
-      <div className="flex-1 relative order-2 md:order-1 h-[50vh] md:h-full">
+      {/* ── MAP — full screen on mobile, flex-1 on desktop ── */}
+      <div className="absolute inset-0 md:relative md:flex-1 md:h-full order-2 md:order-1">
         {!MAPBOX_TOKEN ? (
           <div className="absolute inset-0 flex items-center justify-center bg-[#E8EAE6]">
             <div className="text-center p-6">
@@ -149,7 +149,10 @@ export function MapPage() {
                 longitude={facility.longitude}
                 latitude={facility.latitude}
                 anchor="bottom"
-                onClick={(_e: { originalEvent: { stopPropagation: () => void } }) => flyTo(facility)}
+                onClick={(e: { originalEvent: { stopPropagation: () => void } }) => {
+                  e.originalEvent.stopPropagation();
+                  flyTo(facility);
+                }}
               >
                 <div
                   className="cursor-pointer transition-transform hover:scale-110"
@@ -158,6 +161,7 @@ export function MapPage() {
                       ? 'drop-shadow(0 0 8px rgba(198,91,75,0.6))'
                       : undefined,
                   }}
+                  onClick={(e) => { e.stopPropagation(); flyTo(facility); }}
                 >
                   {/* Pulse ring on selected */}
                   {selectedFacility?.id === facility.id && (
@@ -224,8 +228,8 @@ export function MapPage() {
           </Map>
         )}
 
-        {/* City label overlay */}
-        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow text-xs font-bold text-[#1B1F1D] flex items-center gap-1.5 pointer-events-none">
+        {/* City label — sits above the bottom sheet on mobile */}
+        <div className="absolute bottom-[53%] md:bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-1.5 shadow text-xs font-bold text-[#1B1F1D] flex items-center gap-1.5 pointer-events-none">
           <MapPin className="w-3 h-3 text-[#C65B4B]" />
           Zamboanga City, Philippines
         </div>
@@ -238,55 +242,48 @@ export function MapPage() {
         )}
       </div>
 
-      {/* ── SIDEBAR ── */}
-      <div className="w-full md:w-[400px] lg:w-[440px] bg-white border-l border-border/40 flex flex-col order-1 md:order-2 h-[50vh] md:h-full z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.02)] rounded-t-3xl md:rounded-none -mt-6 md:mt-0 relative">
-
+      {/* ── SIDEBAR / BOTTOM SHEET ── */}
+      <div className="
+        absolute bottom-0 left-0 right-0 h-[52%]
+        md:relative md:h-full md:w-[400px] lg:w-[440px]
+        bg-white border-t md:border-t-0 md:border-l border-[#1B1F1D]/8
+        flex flex-col order-1 md:order-2 z-20
+        rounded-t-3xl md:rounded-none
+        shadow-[0_-8px_30px_rgba(0,0,0,0.08)] md:shadow-[-10px_0_30px_rgba(0,0,0,0.02)]
+      ">
         {/* Mobile drag handle */}
-        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mt-3 mb-1 md:hidden" />
+        <div className="w-10 h-1 bg-[#1B1F1D]/15 rounded-full mx-auto mt-3 md:hidden" />
 
-        <div className="p-4 md:p-6 border-b border-border/40">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-1">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <Zap className="w-4 h-4 text-[#C65B4B]" />
-                <h1 className="font-heading text-xl font-bold text-[#1B1F1D]">E-Waste Drop-offs</h1>
+        {/* Header */}
+        <div className="px-4 pt-3 pb-3 md:px-6 md:pt-5 md:pb-4 border-b border-[#1B1F1D]/8 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#C65B4B]/10">
+                <Zap className="w-3.5 h-3.5 text-[#C65B4B]" />
               </div>
-              <p className="text-[11px] text-[#66706A] flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
-                Zamboanga City only
-              </p>
+              <div>
+                <h1 className="font-heading text-base font-bold text-[#1B1F1D] leading-none">E-Waste Drop-offs</h1>
+                <p className="text-[10px] text-[#66706A] mt-0.5">Zamboanga City · {filteredFacilities.length} locations</p>
+              </div>
             </div>
-            <button
-              onClick={fetchFacilities}
-              className="p-2 rounded-xl hover:bg-[#F6F8F5] transition-colors text-[#66706A] mt-0.5"
-              title="Refresh"
-            >
+            <button onClick={fetchFacilities} className="p-2 rounded-xl hover:bg-[#F6F8F5] transition-colors text-[#66706A]" title="Refresh">
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
-
-          {/* Info banner */}
-          <div className="bg-[#C65B4B]/5 border border-[#C65B4B]/15 rounded-xl px-3 py-2 mb-4 mt-3">
-            <p className="text-[11px] text-[#C65B4B] leading-relaxed">
-              Drop off old phones, batteries, chargers & gadgets at any of these certified collection points. No registration required.
-            </p>
-          </div>
-
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#66706A]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#66706A]" />
             <Input
               placeholder="Search by name or accepted items…"
               value={searchQuery}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-[#F6F8F5] border-transparent focus-visible:ring-[#C65B4B] rounded-xl h-10 text-sm"
+              className="pl-9 bg-[#F6F8F5] border-transparent focus-visible:ring-[#C65B4B] rounded-xl h-9 text-sm"
             />
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-4 md:p-5">
-          <div className="space-y-3 pb-20 md:pb-4">
+        <ScrollArea className="flex-1 px-3 py-3 md:px-5 md:py-4">
+          <div className="space-y-2.5 pb-20 md:pb-4">
 
             {/* Error */}
             {error && (
@@ -303,15 +300,14 @@ export function MapPage() {
             {/* Skeletons */}
             {loading && facilities.length === 0 && (
               <>
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="bg-white border border-border/50 rounded-2xl p-4 animate-pulse">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-white border border-[#1B1F1D]/8 rounded-2xl p-4 animate-pulse">
                     <div className="flex justify-between mb-3">
-                      <div className="h-4 bg-gray-100 rounded w-2/3" />
-                      <div className="h-4 bg-gray-100 rounded w-12" />
+                      <div className="h-3.5 bg-[#1B1F1D]/5 rounded w-2/3" />
+                      <div className="h-3.5 bg-[#1B1F1D]/5 rounded w-12" />
                     </div>
-                    <div className="h-3 bg-gray-100 rounded w-3/4 mb-2" />
-                    <div className="h-3 bg-gray-100 rounded w-1/2 mb-3" />
-                    <div className="h-9 bg-gray-100 rounded-xl" />
+                    <div className="h-3 bg-[#1B1F1D]/5 rounded w-3/4 mb-2" />
+                    <div className="h-8 bg-[#1B1F1D]/5 rounded-xl mt-3" />
                   </div>
                 ))}
               </>
@@ -319,10 +315,10 @@ export function MapPage() {
 
             {/* Empty */}
             {!loading && !error && filteredFacilities.length === 0 && (
-              <div className="text-center py-12">
-                <Zap className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                <p className="font-bold text-[#1B1F1D]">No drop-off points found</p>
-                <p className="text-sm text-[#66706A] mt-1">
+              <div className="text-center py-10">
+                <Zap className="w-8 h-8 text-[#1B1F1D]/10 mx-auto mb-3" />
+                <p className="font-semibold text-[#1B1F1D] text-sm">No drop-off points found</p>
+                <p className="text-xs text-[#66706A] mt-1">
                   {searchQuery ? 'Try a different search term.' : 'Make sure the server is running.'}
                 </p>
               </div>
@@ -341,7 +337,7 @@ export function MapPage() {
                   className={`bg-white border rounded-2xl p-4 cursor-pointer transition-all group ${
                     selectedFacility?.id === facility.id
                       ? 'border-[#C65B4B] shadow-md ring-1 ring-[#C65B4B]/20'
-                      : 'border-border/50 hover:border-[#C65B4B]/30 hover:shadow-sm'
+                      : 'border-[#1B1F1D]/8 hover:border-[#C65B4B]/30 hover:shadow-sm'
                   }`}
                 >
                   {/* Name + distance */}

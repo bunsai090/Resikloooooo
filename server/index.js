@@ -18,7 +18,7 @@ const rawOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const clientOrigin = rawOrigin.endsWith('/') ? rawOrigin.slice(0, -1) : rawOrigin;
 
 app.use(cors({
-  origin: [clientOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: [clientOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://192.168.1.11:5173'],
   credentials: true
 }));
 app.use(express.json({ limit: '25mb' }));
@@ -339,10 +339,9 @@ async function callOpenRouter(promptParts) {
 // GEMINI SDK FALLBACK CHAIN (used if OpenRouter not configured)
 // ==========================================
 const GEMINI_MODEL_CHAIN = [
+  'gemini-1.5-flash',
   'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-2.5-flash-preview-05-20',
-  'gemini-2.5-pro-preview-05-06',
+  'gemini-1.5-pro',
 ];
 
 async function callGemini(promptParts) {
@@ -1432,12 +1431,16 @@ app.get('/api/tutorials', async (req, res) => {
 
     if (youtubeKey && !youtubeKey.includes('your_youtube_api')) {
       try {
+        // Build highly specific search queries based on item + action type
+        const itemName = query.trim();
         const searchTerms = {
-          diy: `${query} DIY reuse upcycle tutorial`,
-          repair: `${query} how to fix repair guide`,
-          recycle: `${query} how to recycle properly sorting`
+          diy:     `how to reuse ${itemName} at home DIY upcycle`,
+          repair:  `how to repair fix ${itemName} step by step`,
+          recycle: `how to recycle ${itemName} properly Philippines`,
+          upcycle: `${itemName} upcycle creative reuse ideas`,
         };
-        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=${limit}&q=${encodeURIComponent(searchTerms[type] || query)}&type=video&key=${youtubeKey}`;
+        const searchQuery = searchTerms[type] || `how to dispose ${itemName} properly`;
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=${limit}&q=${encodeURIComponent(searchQuery)}&type=video&relevanceLanguage=en&key=${youtubeKey}`;
         
         const response = await fetch(searchUrl);
         const data = await response.json();
@@ -1508,8 +1511,8 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 // Start Server listener
-app.listen(PORT, () => {
-  console.log(`🚀 Resiklo Secure Proxy Backend is running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Resiklo Secure Proxy Backend is running on http://0.0.0.0:${PORT}`);
   // Run startup checks: verify/create storage bucket & probe DB tables
   bootstrapDatabase().catch(e => console.error('Bootstrap error:', e.message));
 });
