@@ -1,0 +1,24 @@
+{
+  "short_name": "Resiklo",
+  "name": "Resiklo Waste Decision Platform",
+  "description": "Scan waste and make smart eco-friendly recycling decisions",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F6F8F5",
+  "theme_color": "#2F6B5F",
+  "display": "standalone",
+  "orientation": "portrait"
+}

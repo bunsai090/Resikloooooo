@@ -8,6 +8,8 @@ import { Analysis } from './pages/Analysis';
 import { Ewaste } from './pages/Ewaste';
 import { MapPage } from './pages/MapPage';
 import { Learn } from './pages/Learn';
+import { About } from './pages/About';
+
 export function App() {
   return (
     <BrowserRouter>
@@ -20,8 +22,9 @@ export function App() {
           <Route path="analysis/ewaste" element={<Ewaste />} />
           <Route path="map" element={<MapPage />} />
           <Route path="learn" element={<Learn />} />
+          <Route path="about" element={<About />} />
         </Route>
       </Routes>
-    </BrowserRouter>);
-
+    </BrowserRouter>
+  );
 }

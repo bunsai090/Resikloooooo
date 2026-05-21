@@ -6,7 +6,10 @@
  * The functions return parsed JSON payloads directly.
  */
 
-const SERVER_URL = (import.meta as any).env?.VITE_BACKEND_URL || "http://localhost:5000";
+const SERVER_URL =
+  (import.meta as any).env?.VITE_BACKEND_URL ||
+  (import.meta as any).env?.VITE_API_BASE_URL ||
+  "http://localhost:5000";
 
 /** Upload an image file (or a base64 string) and receive a Scan ID */
 export async function uploadImage(
@@ -60,7 +63,7 @@ export async function analyzeScan(
 export async function initiateScan(
   scanId: string,
   imageBase64?: string
-): Promise<{ success: boolean; scanId: string; objectType: string; confidence: number; isEwaste: boolean; questions: any[] }> {
+): Promise<{ success: boolean; scanId: string; objectType: string; confidence: number; isEwaste: boolean; needsUserInput?: boolean; questions: any[] }> {
   const payload: any = { scanId };
   if (imageBase64) payload.imageBase64 = imageBase64;
 
